@@ -11,11 +11,11 @@ class GetDevicesRequest(BaseVegaModel):
 
         dev_eui_list: list[str] | None = Field(
             default=None,
-            alias="devEui_list",
+            validation_alias="devEui_list",
         )
         app_eui_list: list[str] | None = Field(
             default=None,
-            alias="appEui_list",
+            validation_alias="appEui_list",
         )
 
     select: Select | None = None
@@ -32,44 +32,48 @@ class DevicePosition(BaseModel):
 class DeviceAbpInfo(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
-    dev_address: int | None = Field(default=None, alias="devAddress")
-    apps_key: str | None = Field(default=None, alias="appsKey")
-    nwks_key: str | None = Field(default=None, alias="nwksKey")
+    dev_address: int | None = Field(default=None, validation_alias="devAddress")
+    apps_key: str | None = Field(default=None, validation_alias="appsKey")
+    nwks_key: str | None = Field(default=None, validation_alias="nwksKey")
 
 
 class DeviceOtaaInfo(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
-    app_eui: str | None = Field(default=None, alias="appEui")
-    app_key: str | None = Field(default=None, alias="appKey")
+    app_eui: str | None = Field(default=None, validation_alias="appEui")
+    app_key: str | None = Field(default=None, validation_alias="appKey")
     last_join_ts: int | None = None
 
 
 class VegaDevice(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    dev_eui: str = Field(alias="devEui")
-    dev_name: str | None = Field(default=None, alias="devName")
+    dev_eui: str = Field(validation_alias="devEui")
+    dev_name: str | None = Field(default=None, validation_alias="devName")
 
-    abp: DeviceAbpInfo | None = Field(default=None, alias="ABP")
-    otaa: DeviceOtaaInfo | None = Field(default=None, alias="OTAA")
+    abp: DeviceAbpInfo | None = Field(default=None, validation_alias="ABP")
+    otaa: DeviceOtaaInfo | None = Field(default=None, validation_alias="OTAA")
 
-    frequency_plan: dict[str, Any] | None = Field(default=None, alias="frequencyPlan")
-    channel_mask: dict[str, Any] | None = Field(default=None, alias="channelMask")
+    frequency_plan: dict[str, Any] | None = Field(
+        default=None, validation_alias="frequencyPlan"
+    )
+    channel_mask: dict[str, Any] | None = Field(
+        default=None, validation_alias="channelMask"
+    )
     position: DevicePosition | None = None
 
-    device_class: str | None = Field(default=None, alias="class")
+    device_class: str | None = Field(default=None, validation_alias="class")
 
     fcnt_up: int | None = None
     fcnt_down: int | None = None
     last_data_ts: int | None = None
-    last_rssi: int | None = Field(default=None, alias="lastRssi")
-    last_snr: float | None = Field(default=None, alias="lastSnr")
+    last_rssi: int | None = Field(default=None, validation_alias="lastRssi")
+    last_snr: float | None = Field(default=None, validation_alias="lastSnr")
 
     adr: bool | None = None
     raw_data_storage_period: int | None = Field(
         default=None,
-        alias="rawDataStoragePeriod",
+        validation_alias="rawDataStoragePeriod",
     )
 
 
@@ -91,13 +95,13 @@ class DeviceDataSelect(BaseModel):
     direction: DIRECTIONS | None = None
     with_mac_commands: bool | None = Field(
         default=None,
-        alias="withMacCommands",
+        validation_alias="withMacCommands",
     )
 
 
-class DeviceDataRequest(BaseVegaModel):
+class GetDeviceDataRequest(BaseVegaModel):
     cmd: Literal["get_data_req"] = "get_data_req"
-    dev_eui: str = Field(alias="devEui")
+    dev_eui: str = Field(validation_alias="devEui")
     select: DeviceDataSelect | None = None
 
 
@@ -106,12 +110,12 @@ class DeviceDataEntry(BaseModel):
 
     ts: int | None = None
 
-    gateway_id: str | None = Field(default=None, alias="gatewayId")
+    gateway_id: str | None = Field(default=None, validation_alias="gatewayId")
     ack: bool | None = None
     fcnt: int | None = None
     port: int | None = None
     data: str | None = None
-    mac_data: str | None = Field(default=None, alias="macData")
+    mac_data: str | None = Field(default=None, validation_alias="macData")
 
     freq: int | None = None
     dr: str | None = None
@@ -119,7 +123,7 @@ class DeviceDataEntry(BaseModel):
     snr: float | None = None
 
     type: str | None = None
-    packet_status: str | None = Field(default=None, alias="packetStatus")
+    packet_status: str | None = Field(default=None, validation_alias="packetStatus")
 
 
 class GetDeviceDataResponse(BaseVegaModel):
@@ -127,9 +131,9 @@ class GetDeviceDataResponse(BaseVegaModel):
     status: bool
     err_string: str | None = None
 
-    dev_eui: str | None = Field(default=None, alias="devEui")
-    app_eui: str | None = Field(default=None, alias="appEui")
+    dev_eui: str | None = Field(default=None, validation_alias="devEui")
+    app_eui: str | None = Field(default=None, validation_alias="appEui")
     direction: DIRECTIONS | None = None
-    total_num: int | None = Field(default=None, alias="totalNum")
+    total_num: int | None = Field(default=None, validation_alias="totalNum")
 
     data_list: list[DeviceDataEntry] = Field(default_factory=list)

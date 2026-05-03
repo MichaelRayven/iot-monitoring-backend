@@ -1,3 +1,11 @@
+from app.schemas.devices import (
+    VegaDevice,
+    GetDevicesRequest,
+    GetDevicesResponse,
+    DeviceDataSelect,
+    GetDeviceDataResponse,
+    GetDeviceDataRequest,
+)
 from contextlib import suppress
 import logging
 from app.schemas.auth import (
@@ -58,6 +66,10 @@ class VegaClient:
 
         if self._reader_task is not None:
             self._reader_task.cancel()
+
+            with suppress(asyncio.CancelledError):
+                await self._reader_task
+
             self._reader_task = None
 
         await self._ws.close()
@@ -68,11 +80,39 @@ class VegaClient:
         while True:
             yield await self._event_queue.get()
 
+    async def get_devices(self) -> list[VegaDevice]:
+        response = await self._request(GetDevicesRequest())
+        parsed = GetDevicesResponse.model_validate(response)
+
+        if not parsed.status:
+            raise RuntimeError(parsed.err_string or "Failed to get Vega devices")
+
+        return parsed.devices_list
+
+    async def get_device_data(
+        self,
+        dev_eui: str,
+        select: DeviceDataSelect | None = None,
+    ) -> GetDeviceDataResponse:
+        response = await self._request(
+            GetDeviceDataRequest(
+                dev_eui=dev_eui,
+                select=select or DeviceDataSelect(),
+            )
+        )
+
+        parsed = GetDeviceDataResponse.model_validate(response)
+
+        if not parsed.status:
+            raise RuntimeError(parsed.err_string or "Failed to get Vega device data")
+
+        return parsed
+
     async def _request(self, payload: BaseVegaModel) -> dict[str, Any]:
         assert self._ws is not None
 
         async with self._request_lock:
-            cmd = payload.cmd.replace("_req", "_resp")
+            cmd = self._response_cmd_for(payload.cmd)
             self._pending.add(cmd)
 
             try:
@@ -98,7 +138,7 @@ class VegaClient:
 
             if cmd in self._pending:
                 await self._command_queue.put(message)
-            elif cmd == "rx":
+            else:
                 await self._event_queue.put(message)
 
     async def _authenticate(self) -> dict:
@@ -130,3 +170,10 @@ class VegaClient:
             self._token = None
 
         return response
+
+    @staticmethod
+    def _response_cmd_for(request_cmd: str) -> str:
+        if not request_cmd.endswith("_req"):
+            raise ValueError(f"Unsupported request cmd: {request_cmd}")
+
+        return request_cmd.removesuffix("_req") + "_resp"
