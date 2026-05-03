@@ -3,7 +3,10 @@ from typing import Literal, TypeAlias
 
 
 class BaseVegaModel(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="ignore",
+    )
 
     cmd: str
 

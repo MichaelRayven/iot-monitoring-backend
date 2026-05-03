@@ -9,9 +9,7 @@ class AuthRequest(BaseVegaModel):
     password: str
 
 
-class AuthResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class AuthResponse(BaseVegaModel):
     class RxSettings(BaseModel):
         model_config = ConfigDict(
             populate_by_name=True,
@@ -20,15 +18,17 @@ class AuthResponse(BaseModel):
 
         unsolicited: bool
         direction: DIRECTIONS | None = None
-        with_mac_commands: bool | None = Field(validation_alias="withMacCommands")
+        with_mac_commands: bool | None = Field(
+            default=None, validation_alias="withMacCommands"
+        )
 
     cmd: Literal["auth_resp"] = "auth_resp"
     status: bool
     err_string: str | None = None
     token: str | None = None
     command_list: COMMAND_LIST = Field(default_factory=list)
-    device_access: DEVICE_ACCESS | None
-    rx_settings: RxSettings | None
+    device_access: DEVICE_ACCESS | None = None
+    rx_settings: RxSettings | None = None
 
 
 class AuthCloseRequest(BaseVegaModel):
@@ -36,7 +36,12 @@ class AuthCloseRequest(BaseVegaModel):
     token: str
 
 
-class AuthCloseResponse(BaseModel):
+class AuthCloseResponse(BaseVegaModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="ignore",
+    )
+
     cmd: Literal["close_auth_resp"] = "close_auth_resp"
     status: bool
     err_string: str | None = None
