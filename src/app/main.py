@@ -1,16 +1,11 @@
-import json
-from app.schemas.auth import AuthRequest
-from websockets.asyncio.client import ClientConnection
+# from app.services.realtime_hub import hub
+# from app.services.payload_decoders import decode_payload
+from app.core.settings import settings
+from app.services.vega_client import VegaClient
 import logging
 import asyncio
-import websockets
 from fastapi.concurrency import asynccontextmanager
 from fastapi import FastAPI
-
-WEBSOCKET_URL = "ws://127.0.0.1:8002"
-WEBSOCKET_LOGIN = "root"
-WEBSOCKET_PASSWORD = "123"
-CONNECTION_RETRY_LIMIT = 3
 
 
 logging.basicConfig(
@@ -20,45 +15,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def authenticate_socket(ws: ClientConnection):
-    message = AuthRequest(
-        login=WEBSOCKET_LOGIN,
-        password=WEBSOCKET_PASSWORD,
-    )
+async def realtime_event_listener(client: VegaClient) -> None:
+    await client.connect()
 
-    await ws.send(message.model_dump_json())
-    response = await ws.recv()
-    logger.info(response)
-    return response
-
-
-async def connect_socket():
-    retries = CONNECTION_RETRY_LIMIT
-
-    while retries > 0:
-        try:
-            async with websockets.connect(WEBSOCKET_URL) as ws:
-                logger.info("Websocket connection success.")
-                retries = CONNECTION_RETRY_LIMIT
-                await authenticate_socket(ws)
-
-                async for msg in ws:
-                    try:
-                        data = json.loads(msg)
-                    except Exception:
-                        data = {"raw": msg}
-
-                    logger.info("Data: ", data)
-        except Exception as e:
-            retries -= 1
-            logger.error("Websocket connection error: ", e)
-            await asyncio.sleep(5)
+    async for message in client.listen():
+        logger.info("Realtime message: %s", message)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await connect_socket()
+    client = VegaClient(
+        settings.vega_ws_url,
+        settings.vega_ws_login,
+        settings.vega_ws_password.get_secret_value(),
+    )
+    app.state.vega_client = client
+    app.state.vega_realtime_task = asyncio.create_task(realtime_event_listener(client))
+
     yield
 
+    app.state.vega_realtime_task.cancel()
+    await app.state.vega_client.close()
 
-app = FastAPI(lifespan=lifespan)
+
+app = FastAPI(lifespan=lifespan, title="Vega IoT Monitoring")
