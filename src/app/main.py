@@ -1,3 +1,4 @@
+from fastapi.middleware.cors import CORSMiddleware
 from app.services.realtime_hub import hub
 from app.services.payload_decoders import decode_payload
 from app.core.settings import settings
@@ -70,6 +71,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan, title="Vega IoT Monitoring")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(devices_router)
 app.include_router(floor_router)
