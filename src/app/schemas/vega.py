@@ -1,10 +1,11 @@
+from app.schemas.core import BaseVegaModel
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 
-class VegaRxPacket(BaseModel):
-    cmd: Literal["rx"]
+class VegaRxPacket(BaseVegaModel):
+    cmd: Literal["rx"] = "rx"
     devEui: str
     appEui: str | None = None
     gatewayId: str | None = None
@@ -17,8 +18,6 @@ class VegaRxPacket(BaseModel):
     rssi: int | None = None
     snr: float | None = None
     type: str | None = None
-
-    model_config = {"extra": "allow"}
 
 
 class DecodedPacket(BaseModel):

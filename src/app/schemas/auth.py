@@ -18,9 +18,7 @@ class AuthResponse(BaseVegaModel):
 
         unsolicited: bool
         direction: DIRECTIONS | None = None
-        with_mac_commands: bool | None = Field(
-            default=None, validation_alias="withMacCommands"
-        )
+        with_mac_commands: bool | None = Field(default=None, alias="withMacCommands")
 
     cmd: Literal["auth_resp"] = "auth_resp"
     status: bool

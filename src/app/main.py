@@ -1,11 +1,13 @@
-# from app.services.realtime_hub import hub
-# from app.services.payload_decoders import decode_payload
+from app.services.realtime_hub import hub
+from app.services.payload_decoders import decode_payload
 from app.core.settings import settings
 from app.services.vega_client import VegaClient
 import logging
 import asyncio
-from fastapi.concurrency import asynccontextmanager
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
+
+from app.routers.devices import router as devices_router
 
 
 logging.basicConfig(
@@ -16,10 +18,34 @@ logger = logging.getLogger(__name__)
 
 
 async def realtime_event_listener(client: VegaClient) -> None:
-    await client.connect()
-
     async for message in client.listen():
-        logger.info("Realtime message: %s", message)
+        if message.get("cmd") != "rx":
+            continue
+
+        dev_eui = message.get("devEui")
+        port = message.get("port")
+        raw_data = message.get("data")
+
+        if not dev_eui or port is None or raw_data is None:
+            continue
+
+        device_type = message.get("devType") or message.get("device_type")
+
+        decoded = decode_payload(
+            device_type=device_type,
+            payload_hex=raw_data,
+            port=port,
+        )
+
+        await hub.publish(
+            dev_eui,
+            {
+                "dev_eui": dev_eui,
+                "port": port,
+                "raw": message,
+                "decoded": decoded,
+            },
+        )
 
 
 @asynccontextmanager
@@ -29,6 +55,9 @@ async def lifespan(app: FastAPI):
         settings.vega_ws_login,
         settings.vega_ws_password.get_secret_value(),
     )
+
+    await client.connect()
+
     app.state.vega_client = client
     app.state.vega_realtime_task = asyncio.create_task(realtime_event_listener(client))
 
@@ -39,3 +68,5 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan, title="Vega IoT Monitoring")
+
+app.include_router(devices_router)
