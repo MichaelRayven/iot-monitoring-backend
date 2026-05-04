@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.routers.devices import router as devices_router
+from app.routers.floors import router as floor_router
 
 
 logging.basicConfig(
@@ -70,3 +71,4 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, title="Vega IoT Monitoring")
 
 app.include_router(devices_router)
+app.include_router(floor_router)
