@@ -1,16 +1,13 @@
-import json
-from app.schemas.auth import AuthRequest
-from websockets.asyncio.client import ClientConnection
+from app.services.realtime_hub import hub
+from app.services.payload_decoders import decode_payload
+from app.core.settings import settings
+from app.services.vega_client import VegaClient
 import logging
 import asyncio
-import websockets
-from fastapi.concurrency import asynccontextmanager
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
-WEBSOCKET_URL = "ws://127.0.0.1:8002"
-WEBSOCKET_LOGIN = "root"
-WEBSOCKET_PASSWORD = "123"
-CONNECTION_RETRY_LIMIT = 3
+from app.routers.devices import router as devices_router
 
 
 logging.basicConfig(
@@ -20,45 +17,56 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def authenticate_socket(ws: ClientConnection):
-    message = AuthRequest(
-        login=WEBSOCKET_LOGIN,
-        password=WEBSOCKET_PASSWORD,
-    )
+async def realtime_event_listener(client: VegaClient) -> None:
+    async for message in client.listen():
+        if message.get("cmd") != "rx":
+            continue
 
-    await ws.send(message.model_dump_json())
-    response = await ws.recv()
-    logger.info(response)
-    return response
+        dev_eui = message.get("devEui")
+        port = message.get("port")
+        raw_data = message.get("data")
 
+        if not dev_eui or port is None or raw_data is None:
+            continue
 
-async def connect_socket():
-    retries = CONNECTION_RETRY_LIMIT
+        device_type = message.get("devType") or message.get("device_type")
 
-    while retries > 0:
-        try:
-            async with websockets.connect(WEBSOCKET_URL) as ws:
-                logger.info("Websocket connection success.")
-                retries = CONNECTION_RETRY_LIMIT
-                await authenticate_socket(ws)
+        decoded = decode_payload(
+            device_type=device_type,
+            payload_hex=raw_data,
+            port=port,
+        )
 
-                async for msg in ws:
-                    try:
-                        data = json.loads(msg)
-                    except Exception:
-                        data = {"raw": msg}
-
-                    logger.info("Data: ", data)
-        except Exception as e:
-            retries -= 1
-            logger.error("Websocket connection error: ", e)
-            await asyncio.sleep(5)
+        await hub.publish(
+            dev_eui,
+            {
+                "dev_eui": dev_eui,
+                "port": port,
+                "raw": message,
+                "decoded": decoded,
+            },
+        )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await connect_socket()
+    client = VegaClient(
+        settings.vega_ws_url,
+        settings.vega_ws_login,
+        settings.vega_ws_password.get_secret_value(),
+    )
+
+    await client.connect()
+
+    app.state.vega_client = client
+    app.state.vega_realtime_task = asyncio.create_task(realtime_event_listener(client))
+
     yield
 
+    app.state.vega_realtime_task.cancel()
+    await app.state.vega_client.close()
 
-app = FastAPI(lifespan=lifespan)
+
+app = FastAPI(lifespan=lifespan, title="Vega IoT Monitoring")
+
+app.include_router(devices_router)

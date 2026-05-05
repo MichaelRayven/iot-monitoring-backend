@@ -1,4 +1,14 @@
-from typing import Literal
+from pydantic import BaseModel, ConfigDict
+from typing import Literal, TypeAlias
+
+
+class BaseVegaModel(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="ignore",
+    )
+
+    cmd: str
 
 
 DIRECTIONS = Literal[
@@ -7,7 +17,7 @@ DIRECTIONS = Literal[
     "ALL",  # ALL – all data from and to device.
 ]
 DEVICE_ACCESS = Literal["FULL", "SELECTED"]
-COMMAND_LIST = Literal[
+VegaCommand: TypeAlias = Literal[
     "get_users",
     "manage_users",
     "delete_users",
@@ -29,6 +39,8 @@ COMMAND_LIST = Literal[
     "send_email",
     "tx",
 ]
+
+COMMAND_LIST: TypeAlias = list[VegaCommand]
 DEVICE_PACKET_TYPE = Literal[
     "UNCONF_UP",
     "REPEATUNCONF_UP",
