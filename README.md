@@ -25,3 +25,5 @@ TODO:
 
 Как определять тип устройства?
 Пока что предоставляется пользователем
+
+docker compose -f infra/docker/docker-compose.yaml up --build
