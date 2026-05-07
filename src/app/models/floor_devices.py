@@ -7,12 +7,10 @@ from app.core.db import Base
 class FloorDevice(Base):
     __tablename__ = "floor_devices"
 
-    __table_args__ = (UniqueConstraint("floor_id", "dev_eui", name="uq_floor_device"),)
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     floor_id: Mapped[int] = mapped_column(ForeignKey("floors.id", ondelete="CASCADE"))
 
-    dev_eui: Mapped[str] = mapped_column(String(16), index=True)
+    dev_eui: Mapped[str] = mapped_column(String(16), index=True, unique=True)
     device_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     is_stationary: Mapped[bool]

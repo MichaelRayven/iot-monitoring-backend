@@ -1,30 +1,30 @@
 services:
-  # api:
-  #   build:
-  #     context: ../..
-  #     dockerfile: infra/docker/Dockerbuild
-  #   environment:
-  #     DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-vega_app}
-  #     VEGA_WS_URL: ${VEGA_WS_URL:-ws://host.docker.internal:8002}
-  #     VEGA_WS_LOGIN: ${VEGA_WS_LOGIN:-root}
-  #     VEGA_WS_PASSWORD: ${VEGA_WS_PASSWORD:-123}
-  #     S3_ENDPOINT_URL: http://minio:9000
-  #     S3_BUCKET: ${S3_BUCKET:-vega-floorplans}
-  #     S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
-  #     S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-  #     S3_REGION: ${S3_REGION:-us-east-1}
-  #   ports:
-  #     - "${API_PORT:-8000}:8000"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     minio:
-  #       condition: service_healthy
-  #     minio-create-bucket:
-  #       condition: service_completed_successfully
-  #   extra_hosts:
-  #     - "host.docker.internal:host-gateway"
-  #   restart: unless-stopped
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerbuild
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-vega_app}
+      VEGA_WS_URL: ${VEGA_WS_URL:-ws://host.docker.internal:8002}
+      VEGA_WS_LOGIN: ${VEGA_WS_LOGIN:-root}
+      VEGA_WS_PASSWORD: ${VEGA_WS_PASSWORD:-123}
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-vega-floorplans}
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_REGION: ${S3_REGION:-us-east-1}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-create-bucket:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
 
   postgres:
     image: postgres:17-alpine
