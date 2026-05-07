@@ -59,15 +59,20 @@ async def lifespan(app: FastAPI):
         settings.vega_ws_password.get_secret_value(),
     )
 
-    await client.connect()
+    try:
+        await client.connect()
 
-    app.state.vega_client = client
-    app.state.vega_realtime_task = asyncio.create_task(realtime_event_listener(client))
+        app.state.vega_client = client
+        app.state.vega_realtime_task = asyncio.create_task(
+            realtime_event_listener(client)
+        )
 
-    yield
+        yield
 
-    app.state.vega_realtime_task.cancel()
-    await app.state.vega_client.close()
+        app.state.vega_realtime_task.cancel()
+        await app.state.vega_client.close()
+    except ConnectionRefusedError as _:
+        raise ConnectionRefusedError("IoTVegaServer is unreachable at the moment.")
 
 
 app = FastAPI(lifespan=lifespan, title="Vega IoT Monitoring")

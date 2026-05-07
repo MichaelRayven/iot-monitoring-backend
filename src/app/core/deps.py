@@ -1,3 +1,5 @@
+from app.services.floor_service import FloorService
+from app.services.building_service import BuildingService
 from functools import lru_cache
 from app.services.s3_storage import S3Storage
 from app.core.db import get_db
@@ -16,6 +18,16 @@ def get_s3_service() -> S3Storage:
     return S3Storage()
 
 
+def get_building_service(db: AsyncSession = Depends(get_db)) -> BuildingService:
+    return BuildingService(db)
+
+
+def get_floor_service(db: AsyncSession = Depends(get_db)) -> FloorService:
+    return FloorService(db)
+
+
 VegaClientDep = Annotated[VegaClient, Depends(get_vega_service)]
 AsyncSessionDep = Annotated[AsyncSession, Depends(get_db)]
 S3StorageDep = Annotated[S3Storage, Depends(get_s3_service)]
+BuildingServiceDep = Annotated[BuildingService, Depends(get_building_service)]
+FloorServiceDep = Annotated[FloorService, Depends(get_floor_service)]

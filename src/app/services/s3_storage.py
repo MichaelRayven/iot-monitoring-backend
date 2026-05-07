@@ -1,9 +1,8 @@
+from app.schemas.s3_storage import UploadMeta
 import uuid
 from pathlib import Path
 
 import boto3
-from fastapi import UploadFile
-
 from app.core.settings import settings
 
 
@@ -17,25 +16,43 @@ class S3Storage:
             region_name=settings.s3_region,
         )
 
-    async def upload_floorplan(self, file: UploadFile) -> str:
-        ext = Path(file.filename or "floorplan.png").suffix or ".png"
-        key = f"floorplans/{uuid.uuid4()}{ext}"
-
-        content = await file.read()
-
-        self.client.put_object(
-            Bucket=settings.s3_bucket,
-            Key=key,
-            Body=content,
-            ContentType=file.content_type or "application/octet-stream",
-        )
-
-        return key
-
-    async def get_presigned_url(self, key: str) -> str:
+    def generate_download_url(self, key: str, expires_in: int = 24 * 3600) -> str:
+        """
+        Generate a presigned URL for downloading a file from S3.
+        """
         url = self.client.generate_presigned_url(
-            "get_object",
+            ClientMethod="get_object",
             Params={"Bucket": settings.s3_bucket, "Key": key},
-            ExpiresIn=60 * 60 * 24 * 7,
+            ExpiresIn=expires_in,
         )
         return url
+
+    def generate_upload_url(
+        self, file_name: str, file_type: str, expires_in: int = 3600
+    ) -> UploadMeta:
+        """
+        Generate a presigned URL for uploading a file directly to S3.
+        """
+        # Generate a unique key for the file
+        ext = Path(file_name).suffix or ""
+        key = f"uploads/{uuid.uuid4()}{ext}"
+
+        # Generate presigned URL for PUT operation
+        upload_url = self.client.generate_presigned_url(
+            ClientMethod="put_object",
+            Params={
+                "Bucket": settings.s3_bucket,
+                "Key": key,
+                "ContentType": file_type,
+            },
+            ExpiresIn=expires_in,
+            HttpMethod="PUT",
+        )
+
+        return UploadMeta(
+            upload_url=upload_url,
+            key=key,
+            file_name=file_name,
+            file_type=file_type,
+            expires_in=expires_in,
+        )

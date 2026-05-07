@@ -1,48 +1,44 @@
-from pydantic import BaseModel, Field
+from app.models.floor_devices import FloorDevice
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class FloorCreate(BaseModel):
-    name: str
-    building: str | None = None
-    scale_factor: float = Field(gt=0)
+    """Schema for creating a new floor"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str = Field(..., min_length=1, max_length=255, description="Display name")
+    building_id: int = Field(..., description="Parent building id")
+    floorplan_key: str = Field(..., description="Floorplan image S3 key")
+    scale_factor: int = Field(ge=1)
 
 
 class FloorUpdate(BaseModel):
-    name: str | None = None
-    building: str | None = None
-    scale_factor: float | None = Field(default=None, gt=0)
+    """Schema for updating the floor (all fields optional)"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str | None = Field(
+        None, min_length=1, max_length=255, description="Display name"
+    )
+    building_id: int | None = Field(None, description="Parent building id")
+    floorplan_key: str | None = Field(None, description="Floorplan image S3 key")
+    scale_factor: float | None = Field(default=None, ge=1)
 
 
-class FloorDeviceCreate(BaseModel):
-    dev_eui: str = Field(min_length=16, max_length=16)
-    device_type: str | None = None
-    is_stationary: bool = False
-    x: float | None = None
-    y: float | None = None
+class FloorResponse(BaseModel):
+    """Schema for floor in responses"""
 
+    model_config = ConfigDict(from_attributes=True)
 
-class FloorDevicePositionUpdate(BaseModel):
-    x: float
-    y: float
-
-
-class FloorDeviceRead(BaseModel):
-    id: int
-    dev_eui: str
-    device_type: str | None
-    is_stationary: bool
-    x: float | None
-    y: float | None
-
-    model_config = {"from_attributes": True}
-
-
-class FloorRead(BaseModel):
     id: int
     name: str
-    building: str | None
-    floorplan_url: str | None
-    scale_factor: float
-    devices: list[FloorDeviceRead] = []
 
-    model_config = {"from_attributes": True}
+
+class FloorFullResponse(FloorResponse):
+    """Schema for full floor information in responses"""
+
+    building_id: int
+    floorplan_url: str
+    scale_factor: int
+    devices: list[FloorDevice] = []
