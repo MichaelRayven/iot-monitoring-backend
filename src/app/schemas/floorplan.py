@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class FloorplanCreate(BaseModel):
@@ -7,6 +7,6 @@ class FloorplanCreate(BaseModel):
 
 
 class FloorplanResponse(BaseModel):
-    upload_url: str
-    public_url: str
-    key: str
+    upload_url: str = Field(..., description="Presigned upload url")
+    public_url: str = Field(..., description="Presigned download url for the image")
+    key: str = Field(..., description="S3 key for the floorplan image")

@@ -12,6 +12,7 @@ from app.routers.devices import router as devices_router
 from app.routers.floors import router as floors_router
 from app.routers.buildings import router as buildings_router
 from app.routers.realtime import router as realtime_router
+from app.routers.floorplan import router as floorplan_router
 
 
 logging.basicConfig(
@@ -93,3 +94,4 @@ app.include_router(devices_router)
 app.include_router(floors_router)
 app.include_router(buildings_router)
 app.include_router(realtime_router)
+app.include_router(floorplan_router)

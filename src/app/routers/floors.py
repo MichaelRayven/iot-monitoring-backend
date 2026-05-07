@@ -54,12 +54,6 @@ async def get_floors_by_building(
         include_devices=include_devices,
     )
 
-    if not floors:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No floors found for building with ID {building_id}",
-        )
-
     return floors
 
 
