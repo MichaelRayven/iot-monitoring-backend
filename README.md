@@ -25,6 +25,7 @@
 
 ### Запуск приложение
 docker compose -f infra/docker/docker-compose.yaml up --build
+uv run alembic upgrade head
 
 ### TODO:
 - [ ] Add prek and ruff
