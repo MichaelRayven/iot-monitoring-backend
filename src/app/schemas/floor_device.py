@@ -1,3 +1,4 @@
+from app.schemas.device import DeviceResponse
 from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -27,13 +28,12 @@ class FloorDeviceUpdate(BaseModel):
     y: float | None = None
 
 
-class FloorDeviceResponse(BaseModel):
+class FloorDeviceResponse(DeviceResponse):
     """Schema for floor devices in responses"""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    dev_eui: str
     floor_id: int
     device_type: str | None = None
     is_stationary: bool = False

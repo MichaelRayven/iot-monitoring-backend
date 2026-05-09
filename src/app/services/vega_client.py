@@ -9,6 +9,8 @@ from app.schemas.vega.get_device_data import (
 from app.schemas.vega.get_devices import (
     GetDevicesRequest,
     GetDevicesResponse,
+    GetDevicesSelect,
+    VegaDevice,
 )
 from contextlib import suppress
 import logging
@@ -77,9 +79,25 @@ class VegaClient:
         while True:
             yield await self._event_queue.get()
 
-    async def get_devices(self) -> GetDevicesResponse:
-        response = await self._request(GetDevicesRequest())
+    async def get_devices(
+        self, select: GetDevicesSelect | None = None
+    ) -> GetDevicesResponse:
+        response = await self._request(GetDevicesRequest(select=select))
         return GetDevicesResponse.model_validate(response)
+
+    async def get_device_by_id(self, dev_eui: str) -> VegaDevice | None:
+        """Get single device registration info by EUI"""
+
+        response = await self.get_devices(
+            GetDevicesSelect(
+                dev_eui_list=[dev_eui]  # ty:ignore[unknown-argument]
+            )
+        )
+
+        if response.status and len(response.devices_list) > 0:
+            return response.devices_list[0]
+        else:
+            return None
 
     async def get_device_data(
         self,
@@ -103,6 +121,10 @@ class VegaClient:
             self._pending.add(cmd)
 
             try:
+                logger.debug(
+                    "Request structure: %s",
+                    payload.model_dump_json(by_alias=True, exclude_none=True),
+                )
                 await self._ws.send(
                     payload.model_dump_json(by_alias=True, exclude_none=True)
                 )

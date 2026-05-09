@@ -128,7 +128,6 @@ class FloorService:
         floor_id: int,
         skip: int = 0,
         limit: int = 100,
-        device_type: str | None = None,
     ) -> list[FloorDevice]:
         """Get all devices for a specific floor"""
 
@@ -138,9 +137,6 @@ class FloorService:
             raise ValueError(f"Floor with id {floor_id} not found")
 
         stmt = select(FloorDevice).where(FloorDevice.floor_id == floor_id)
-
-        if device_type:
-            stmt = stmt.where(FloorDevice.device_type == device_type)
 
         # Apply pagination
         stmt = stmt.offset(skip).limit(limit).order_by(FloorDevice.id)
