@@ -1,20 +1,17 @@
-from app.schemas.devices import (
-    VegaDevice,
+from app.schemas.vega.auth_close import AuthCloseRequest, AuthCloseResponse
+from app.schemas.vega.auth import AuthRequest, AuthResponse
+from app.schemas.vega.base import BaseVegaRequest
+from app.schemas.vega.get_device_data import (
+    GetDeviceDataRequest,
+    GetDeviceDataSelect,
+    GetDeviceDataResponse,
+)
+from app.schemas.vega.get_devices import (
     GetDevicesRequest,
     GetDevicesResponse,
-    DeviceDataSelect,
-    GetDeviceDataResponse,
-    GetDeviceDataRequest,
 )
 from contextlib import suppress
 import logging
-from app.schemas.auth import (
-    AuthRequest,
-    AuthResponse,
-    AuthCloseRequest,
-    AuthCloseResponse,
-)
-from app.schemas.core import BaseVegaModel
 import asyncio
 import json
 from collections.abc import AsyncIterator
@@ -80,35 +77,25 @@ class VegaClient:
         while True:
             yield await self._event_queue.get()
 
-    async def get_devices(self) -> list[VegaDevice]:
+    async def get_devices(self) -> GetDevicesResponse:
         response = await self._request(GetDevicesRequest())
-        parsed = GetDevicesResponse.model_validate(response)
-
-        if not parsed.status:
-            raise RuntimeError(parsed.err_string or "Failed to get Vega devices")
-
-        return parsed.devices_list
+        return GetDevicesResponse.model_validate(response)
 
     async def get_device_data(
         self,
         dev_eui: str,
-        select: DeviceDataSelect | None = None,
+        select: GetDeviceDataSelect | None = GetDeviceDataSelect(direction="UPLINK"),
     ) -> GetDeviceDataResponse:
         response = await self._request(
             GetDeviceDataRequest(
                 dev_eui=dev_eui,
-                select=select or DeviceDataSelect(),
+                select=select,
             )
         )
 
-        parsed = GetDeviceDataResponse.model_validate(response)
+        return GetDeviceDataResponse.model_validate(response)
 
-        if not parsed.status:
-            raise RuntimeError(parsed.err_string or "Failed to get Vega device data")
-
-        return parsed
-
-    async def _request(self, payload: BaseVegaModel) -> dict[str, Any]:
+    async def _request(self, payload: BaseVegaRequest) -> dict[str, Any]:
         assert self._ws is not None
 
         async with self._request_lock:
@@ -134,9 +121,8 @@ class VegaClient:
             message = json.loads(raw)
             cmd = message.get("cmd")
 
-            logger.info("Message: %s", message)
-
             if cmd in self._pending:
+                logger.info("Command: %s", message.get("cmd"))
                 await self._command_queue.put(message)
             else:
                 await self._event_queue.put(message)

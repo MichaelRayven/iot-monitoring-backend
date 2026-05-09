@@ -8,6 +8,8 @@ class BaseVegaModel(BaseModel):
         extra="ignore",
     )
 
+
+class BaseVegaRequest(BaseVegaModel):
     cmd: str
 
 

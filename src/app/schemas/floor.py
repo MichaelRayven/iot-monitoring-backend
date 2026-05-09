@@ -1,4 +1,4 @@
-from app.models.floor_devices import FloorDevice
+from app.schemas.floor_device import FloorDeviceResponse
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -41,4 +41,4 @@ class FloorFullResponse(FloorResponse):
     building_id: int
     floorplan_url: str
     scale_factor: int
-    devices: list[FloorDevice] = []
+    devices: list[FloorDeviceResponse] = []

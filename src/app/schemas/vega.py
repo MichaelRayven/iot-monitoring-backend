@@ -1,4 +1,4 @@
-from app.schemas.core import BaseVegaModel
+from app.schemas.vega.base import BaseVegaModel
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field

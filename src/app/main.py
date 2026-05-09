@@ -1,5 +1,5 @@
 from fastapi.middleware.cors import CORSMiddleware
-from app.services.realtime_hub import hub
+from app.services.connection_manager import manager
 from app.services.payload_decoders import decode_payload
 from app.core.settings import settings
 from app.services.vega_client import VegaClient
@@ -9,8 +9,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.routers.devices import router as devices_router
-from app.routers.floors import router as floor_router
+from app.routers.floors import router as floors_router
+from app.routers.buildings import router as buildings_router
 from app.routers.realtime import router as realtime_router
+from app.routers.floorplan import router as floorplan_router
 
 
 logging.basicConfig(
@@ -40,15 +42,15 @@ async def realtime_event_listener(client: VegaClient) -> None:
             port=port,
         )
 
-        await hub.publish(
-            dev_eui,
-            {
-                "dev_eui": dev_eui,
-                "port": port,
-                "raw": message,
-                "decoded": decoded,
-            },
-        )
+        # await manager.send_update(
+        #     dev_eui,
+        #     {
+        #         "dev_eui": dev_eui,
+        #         "port": port,
+        #         "raw": message,
+        #         "decoded": decoded,
+        #     },
+        # )
 
 
 @asynccontextmanager
@@ -89,5 +91,7 @@ app.add_middleware(
 )
 
 app.include_router(devices_router)
-app.include_router(floor_router)
+app.include_router(floors_router)
+app.include_router(buildings_router)
 app.include_router(realtime_router)
+app.include_router(floorplan_router)

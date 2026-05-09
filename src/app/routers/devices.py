@@ -1,7 +1,7 @@
+from app.schemas.devices import DeviceDataOutSchema
 from app.core.deps import AsyncSessionDep, VegaClientDep
 from app.models.floor_devices import FloorDevice
-from app.schemas.devices import DeviceDataSelect, DeviceOutSchema
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.services.payload_decoders import decode_payload
@@ -9,10 +9,17 @@ from app.services.payload_decoders import decode_payload
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
-@router.get("", response_model=list[DeviceOutSchema])
+@router.get("", response_model=list[DeviceDataOutSchema])
 async def get_devices(service: VegaClientDep, db: AsyncSessionDep):
-    devices = await service.get_devices()
-    dev_euis = [device.dev_eui for device in devices]
+    response = await service.get_devices()
+
+    if not response.status:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get device list from IoTVegaServer.",
+        )
+
+    dev_euis = [device.dev_eui for device in response.devices_list]
 
     floor_devices_by_eui: dict[str, FloorDevice] = {}
     if dev_euis:
@@ -22,25 +29,28 @@ async def get_devices(service: VegaClientDep, db: AsyncSessionDep):
         for floor_device in result.scalars():
             floor_devices_by_eui.setdefault(floor_device.dev_eui, floor_device)
 
-    response: list[DeviceOutSchema] = []
-    for device in devices:
+    result: list[DeviceDataOutSchema] = []
+    for device in response.devices_list:
         floor_device = floor_devices_by_eui.get(device.dev_eui)
         device_type = floor_device.device_type if floor_device is not None else None
 
         data = None
         data_response = await service.get_device_data(
             dev_eui=device.dev_eui,
-            select=DeviceDataSelect(limit=1),
         )
         latest_data = next(iter(data_response.data_list), None)
-        if latest_data is not None and latest_data.data and latest_data.port is not None:
+        if (
+            latest_data is not None
+            and latest_data.data
+            and latest_data.port is not None
+        ):
             data = decode_payload(device_type, latest_data.data, latest_data.port)
 
-        response.append(
-            DeviceOutSchema(
+        result.append(
+            DeviceDataOutSchema(
                 dev_eui=device.dev_eui,
                 name=device.dev_name,
-                type=device_type,
+                device_type=device_type,
                 rssi=device.last_rssi,
                 snr=device.last_snr,
                 floor_id=floor_device.floor_id if floor_device is not None else None,
