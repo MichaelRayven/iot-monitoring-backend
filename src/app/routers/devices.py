@@ -33,19 +33,6 @@ async def get_devices(service: VegaClientDep, db: AsyncSessionDep):
     for device in response.devices_list:
         floor_device = floor_devices_by_eui.get(device.dev_eui)
         device_type = floor_device.device_type if floor_device is not None else None
-
-        data = None
-        data_response = await service.get_device_data(
-            dev_eui=device.dev_eui,
-        )
-        latest_data = next(iter(data_response.data_list), None)
-        if (
-            latest_data is not None
-            and latest_data.data
-            and latest_data.port is not None
-        ):
-            data = decode_payload(device_type, latest_data.data, latest_data.port)
-
         result.append(
             DeviceDataOutSchema(
                 dev_eui=device.dev_eui,
@@ -59,11 +46,11 @@ async def get_devices(service: VegaClientDep, db: AsyncSessionDep):
                 else None,
                 x=floor_device.x if floor_device is not None else None,
                 y=floor_device.y if floor_device is not None else None,
-                data=data,
+                data=None,
             )
         )
 
-    return response
+    return result
 
 
 @router.post("/{dev_eui}/data")

@@ -1,8 +1,10 @@
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DeviceDataOutSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     dev_eui: str
     name: str | None = None
     device_type: str | None = None
