@@ -27,3 +27,4 @@ TODO:
 Пока что предоставляется пользователем
 
 docker compose -f infra/docker/docker-compose.yaml up --build
+uv run alembic upgrade head

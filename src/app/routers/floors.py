@@ -1,183 +1,240 @@
-from app.core.deps import AsyncSessionDep, S3StorageDep
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 
-from app.models.floor import Floor
-from app.models.floor_devices import FloorDevice
-from app.schemas.floor import (
-    FloorCreate,
+from app.core.deps import FloorServiceDep, S3StorageDep
+from app.schemas.pagination import PaginationParams
+from app.schemas.floor import FloorCreate, FloorUpdate, FloorResponse, FloorFullResponse
+from app.schemas.floor_device import (
     FloorDeviceCreate,
-    FloorDevicePositionUpdate,
-    FloorRead,
-    FloorUpdate,
+    FloorDeviceUpdate,
+    FloorDeviceResponse,
 )
 
 router = APIRouter(prefix="/floors", tags=["floors"])
 
 
-@router.post("", response_model=FloorRead)
-async def create_floor(payload: FloorCreate, db: AsyncSessionDep):
-    floor = Floor(**payload.model_dump())
-    db.add(floor)
-    await db.commit()
-    await db.refresh(floor)
-    return floor
+@router.post(
+    "/",
+    response_model=FloorResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new floor",
+)
+async def create_floor(
+    floor_data: FloorCreate,
+    service: FloorServiceDep,
+):
+    try:
+        floor = await service.create_floor(floor_data)
+        return floor
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Database integrity constraint violated",
+        )
 
 
-@router.get("", response_model=list[FloorRead])
-async def list_floors(db: AsyncSessionDep):
-    result = await db.execute(select(Floor).options(selectinload(Floor.devices)))
-    return result.scalars().all()
-
-
-@router.get("/{floor_id}", response_model=FloorRead)
-async def get_floor(floor_id: int, db: AsyncSessionDep, s3: S3StorageDep):
-    result = await db.execute(
-        select(Floor).where(Floor.id == floor_id).options(selectinload(Floor.devices))
+@router.get(
+    "/building/{building_id}",
+    response_model=List[FloorResponse],
+    summary="Get all floors for a specific building",
+)
+async def get_floors_by_building(
+    building_id: int,
+    service: FloorServiceDep,
+    pagination: PaginationParams = Depends(),
+    include_devices: bool = Query(False, description="Include devices in response"),
+):
+    floors = await service.get_floors_by_building(
+        building_id=building_id,
+        skip=pagination.skip,
+        limit=pagination.limit,
+        include_devices=include_devices,
     )
-    floor = result.scalar_one_or_none()
 
-    if floor is None:
-        raise HTTPException(status_code=404, detail="Floor not found")
+    if not floors:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No floors found for building with ID {building_id}",
+        )
 
-    response = FloorRead.model_validate(floor)
-    s3_key = floor.floorplan_s3_key
-    if s3_key is not None:
-        response.floorplan_url = await s3.get_presigned_url(s3_key)
-
-    return response
+    return floors
 
 
-@router.patch("/{floor_id}", response_model=FloorRead)
+@router.get(
+    "/{floor_id}",
+    response_model=FloorFullResponse,
+    summary="Get a specific floor by ID",
+)
+async def get_floor(
+    floor_id: int,
+    service: FloorServiceDep,
+    s3_service: S3StorageDep,
+    include_devices: bool = Query(True, description="Include devices in response"),
+):
+    floor = await service.get_floor(floor_id, include_devices=include_devices)
+
+    if not floor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Floor with ID {floor_id} not found",
+        )
+
+    floorplan_url = s3_service.generate_download_url(floor.floorplan_key)
+
+    return FloorFullResponse(
+        id=floor.id,
+        name=floor.name,
+        building_id=floor.building_id,
+        floorplan_url=floorplan_url,
+        scale_factor=floor.scale_factor,
+        devices=floor.devices if include_devices else [],
+    )
+
+
+@router.put("/{floor_id}", response_model=FloorResponse, summary="Update a floor")
 async def update_floor(
-    db: AsyncSessionDep,
     floor_id: int,
-    payload: FloorUpdate,
+    service: FloorServiceDep,
+    floor_data: FloorUpdate,
 ):
-    floor = await db.get(Floor, floor_id)
+    try:
+        floor = await service.update_floor(floor_id, floor_data)
 
-    if floor is None:
-        raise HTTPException(status_code=404, detail="Floor not found")
+        if not floor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Floor with ID {floor_id} not found",
+            )
 
-    for key, value in payload.model_dump(exclude_none=True).items():
-        setattr(floor, key, value)
-
-    await db.commit()
-    await db.refresh(floor)
-    return floor
-
-
-@router.delete("/{floor_id}")
-async def delete_floor(floor_id: int, db: AsyncSessionDep):
-    floor = await db.get(Floor, floor_id)
-
-    if floor is None:
-        raise HTTPException(status_code=404, detail="Floor not found")
-
-    await db.delete(floor)
-    await db.commit()
-
-    return {"status": "ok"}
+        return floor
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.post("/{floor_id}/floorplan", response_model=FloorRead)
-async def upload_floorplan(
-    db: AsyncSessionDep,
-    s3: S3StorageDep,
+@router.delete(
+    "/{floor_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a floor"
+)
+async def delete_floor(
     floor_id: int,
-    file: UploadFile = File(...),
+    service: FloorServiceDep,
 ):
-    floor = await db.get(Floor, floor_id)
+    deleted = await service.delete_floor(floor_id)
 
-    if floor is None:
-        raise HTTPException(status_code=404, detail="Floor not found")
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Floor with ID {floor_id} not found",
+        )
 
-    key = await s3.upload_floorplan(file)
-
-    floor.floorplan_s3_key = key
-
-    await db.commit()
-    await db.refresh(floor)
-
-    return floor
+    return None
 
 
-@router.post("/{floor_id}/devices")
+@router.get(
+    "/{floor_id}/devices",
+    response_model=List[FloorDeviceResponse],
+    summary="Get all devices on a floor",
+)
+async def get_floor_devices(
+    floor_id: int,
+    service: FloorServiceDep,
+    pagination: PaginationParams = Depends(),
+    device_type: Optional[str] = Query(None, description="Filter by device type"),
+):
+    try:
+        devices = await service.get_floor_devices(
+            floor_id=floor_id,
+            skip=pagination.skip,
+            limit=pagination.limit,
+            device_type=device_type,
+        )
+        return devices
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post(
+    "/{floor_id}/devices",
+    response_model=FloorDeviceResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a device to a floor",
+)
 async def add_device_to_floor(
     floor_id: int,
-    payload: FloorDeviceCreate,
-    db: AsyncSessionDep,
+    service: FloorServiceDep,
+    device_data: FloorDeviceCreate,
 ):
-    floor = await db.get(Floor, floor_id)
+    try:
+        device = await service.add_device_to_floor(floor_id, device_data)
+        return device
+    except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
-    if floor is None:
-        raise HTTPException(status_code=404, detail="Floor not found")
 
-    if payload.is_stationary and (payload.x is None or payload.y is None):
+@router.get(
+    "/devices/{device_id}",
+    response_model=FloorDeviceResponse,
+    summary="Get a specific device by ID",
+)
+async def get_floor_device(
+    device_id: int,
+    service: FloorServiceDep,
+):
+    """Get a specific device by its ID"""
+    device = await service.get_floor_device(device_id)
+
+    if not device:
         raise HTTPException(
-            status_code=422,
-            detail="Stationary device must have x and y coordinates",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Device with ID {device_id} not found",
         )
 
-    floor_device = FloorDevice(
-        floor_id=floor_id,
-        **payload.model_dump(),
-    )
-
-    db.add(floor_device)
-    await db.commit()
-    await db.refresh(floor_device)
-
-    return floor_device
+    return device
 
 
-@router.patch("/{floor_id}/devices/{floor_device_id}/position")
-async def update_device_position(
-    floor_id: int,
-    floor_device_id: int,
-    payload: FloorDevicePositionUpdate,
-    db: AsyncSessionDep,
+@router.put(
+    "/devices/{device_id}",
+    response_model=FloorDeviceResponse,
+    summary="Update a device",
+)
+async def update_floor_device(
+    device_id: int,
+    device_data: FloorDeviceUpdate,
+    service: FloorServiceDep,
 ):
-    result = await db.execute(
-        select(FloorDevice).where(
-            FloorDevice.id == floor_device_id,
-            FloorDevice.floor_id == floor_id,
-        )
-    )
-    floor_device = result.scalar_one_or_none()
+    try:
+        device = await service.update_floor_device(device_id, device_data)
 
-    if floor_device is None:
-        raise HTTPException(status_code=404, detail="Floor device not found")
+        if not device:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Device with ID {device_id} not found",
+            )
 
-    floor_device.x = payload.x
-    floor_device.y = payload.y
-    floor_device.is_stationary = True
-
-    await db.commit()
-    await db.refresh(floor_device)
-
-    return floor_device
+        return device
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.delete("/{floor_id}/devices/{floor_device_id}")
-async def remove_device_from_floor(
-    floor_id: int,
-    floor_device_id: int,
-    db: AsyncSessionDep,
+@router.delete(
+    "/devices/{device_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a device",
+)
+async def delete_floor_device(
+    device_id: int,
+    service: FloorServiceDep,
 ):
-    result = await db.execute(
-        select(FloorDevice).where(
-            FloorDevice.id == floor_device_id,
-            FloorDevice.floor_id == floor_id,
+    deleted = await service.delete_floor_device(device_id)
+
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Device with ID {device_id} not found",
         )
-    )
-    floor_device = result.scalar_one_or_none()
 
-    if floor_device is None:
-        raise HTTPException(status_code=404, detail="Floor device not found")
-
-    await db.delete(floor_device)
-    await db.commit()
-
-    return {"status": "ok"}
+    return None
