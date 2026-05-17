@@ -41,7 +41,6 @@ class VegaClient:
         self._reader_task: asyncio.Task[None] | None = None
 
         self._expected_response_cmd: str | None = None
-        self._expected_dev_eui: str | None = None
         self._response_future: asyncio.Future | None = None
 
         self._event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
@@ -122,9 +121,6 @@ class VegaClient:
             cmd = self._response_cmd_for(payload.cmd)
             self._expected_response_cmd = cmd
 
-            payload_dict = payload.model_dump(by_alias=True, exclude_none=True)
-            self._expected_dev_eui = payload_dict.get("devEui")
-
             self._response_future = asyncio.get_running_loop().create_future()
 
             try:
@@ -139,7 +135,6 @@ class VegaClient:
                 return await asyncio.wait_for(self._response_future, timeout=15)
             finally:
                 self._expected_response_cmd = None
-                self._expected_dev_eui = None
                 self._response_future = None
 
     async def _reader_loop(self) -> None:
@@ -152,16 +147,7 @@ class VegaClient:
             message = json.loads(raw)
             cmd = message.get("cmd")
 
-            is_expected = False
-            if cmd and cmd == self._expected_response_cmd:
-                is_expected = True
-
-                if self._expected_dev_eui is not None:
-                    msg_dev_eui = message.get("devEui")
-                    if msg_dev_eui is not None and msg_dev_eui != self._expected_dev_eui:
-                        is_expected = False
-
-            if is_expected and self._response_future and not self._response_future.done():
+            if cmd and cmd == self._expected_response_cmd and self._response_future and not self._response_future.done():
                 logger.info("Command matched expected: %s", cmd)
                 self._response_future.set_result(message)
             else:
