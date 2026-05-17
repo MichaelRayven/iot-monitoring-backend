@@ -1,6 +1,13 @@
 from typing import Any
 from app.services.decoders.base import PayloadDecoderStrategy
-from app.services.decoders.utils import read_u8, read_i8, read_u16, read_u32, read_i32
+from app.services.decoders.utils import (
+    read_u8,
+    read_i8,
+    read_u16,
+    read_u32,
+    read_i32,
+    read_i16,
+)
 
 
 class SmartBadgeDecoder(PayloadDecoderStrategy):
@@ -45,6 +52,35 @@ class SmartBadgeDecoder(PayloadDecoderStrategy):
             tilt_angle, offset = read_u16(data, offset)
             beacon_type, offset = read_u8(data, offset)
 
+            beacons = []
+            if beacon_type == 4:  # Vega Beacon
+                mac = data[offset : offset + 6].hex()
+                offset += 6
+
+                b_battery, offset = read_u8(data, offset)
+                b_temperature, offset = read_i16(data, offset)
+                b_humidity, offset = read_u8(data, offset)
+
+                offset += 10  # Skip the 10 bytes filled with zeros
+
+                rssi, offset = read_i8(data, offset)
+                tx_power, offset = read_i8(data, offset)
+                ppe_state, offset = read_u8(data, offset)
+
+                beacons.append(
+                    {
+                        "mac": mac,
+                        "battery_percent": b_battery,
+                        "temperature_c": b_temperature,
+                        "humidity_percent": b_humidity,
+                        "rssi": rssi,
+                        "tx_power": tx_power,
+                        "ppe_state_raw": ppe_state,
+                    }
+                )
+            else:
+                return {"packet": "unknown", "payload_hex": payload_hex}
+
             return {
                 "device": "Smart Badge",
                 "packet": "nearest_ble_beacon",
@@ -54,8 +90,7 @@ class SmartBadgeDecoder(PayloadDecoderStrategy):
                 "temperature_c": temperature,
                 "state_raw": state,
                 "tilt_angle": tilt_angle,
-                "beacon_type": beacon_type,
-                "rest_payload_hex": data[offset:].hex(),
+                "beacons": beacons,
             }
 
         if packet_type == 5:
@@ -100,9 +135,4 @@ class SmartBadgeDecoder(PayloadDecoderStrategy):
                 "beacons": beacons,
             }
 
-        return {
-            "device": "Smart Badge",
-            "packet": "unknown_badge_packet",
-            "packet_type": packet_type,
-            "payload_hex": payload_hex,
-        }
+        return {"packet": "unknown", "payload_hex": payload_hex}

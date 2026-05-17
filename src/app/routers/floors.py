@@ -316,9 +316,12 @@ async def get_floor_device(
     for entry in vega_data.data_list:
         if not entry.data or not entry.port:
             continue
-        decoded_data.append(
-            payload_service.decode_payload(device.device_type, entry.data, entry.port)
+        decoded_entry = payload_service.decode_payload(
+            device.device_type, entry.data, entry.port
         )
+        if decoded_entry.get("packet") == "unknown":
+            continue
+        decoded_data.append(decoded_entry)
 
     return FloorDeviceWithDataResponse(
         id=device.id,

@@ -18,6 +18,8 @@ class SmartMS0101Decoder(PayloadDecoderStrategy):
         reason, offset = read_u8(data, offset)
         timestamp, offset = read_u32(data, offset)
 
+        reasons = {0: "heartbeat", 1: "alarm_triggered", 2: "alarm_armed"}
+
         return {
             "device": "Smart-MS0101",
             "packet": "motion_sensor_state",
@@ -26,7 +28,8 @@ class SmartMS0101Decoder(PayloadDecoderStrategy):
             "settings_raw": settings,
             "activation_type": "OTAA" if settings & 0b00000001 == 0 else "ABP",
             "confirmation_enabled": bool(settings & 0b00000010),
-            "temperature_c": temperature,
+            "temperature_c": temperature / 10,
             "send_reason": reason,
+            "send_reason_label": reasons[reason],
             "device_timestamp": timestamp,
         }
