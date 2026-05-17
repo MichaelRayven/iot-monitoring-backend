@@ -1,16 +1,23 @@
+from app.schemas.vega.get_device_data import GetDeviceDataSelect
 import logging
 from app.models.floor_devices import FloorDevice
 from app.schemas.vega.get_devices import GetDevicesSelect
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 
-from app.core.deps import FloorServiceDep, S3StorageDep, VegaClientDep
+from app.core.deps import (
+    FloorServiceDep,
+    S3StorageDep,
+    VegaClientDep,
+    PayloadDecoderServiceDep,
+)
 from app.schemas.pagination import PaginationParams
 from app.schemas.floor import FloorCreate, FloorUpdate, FloorResponse, FloorFullResponse
 from app.schemas.floor_device import (
     FloorDeviceCreate,
     FloorDeviceUpdate,
     FloorDeviceResponse,
+    FloorDeviceWithDataResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -275,11 +282,14 @@ async def add_device_to_floor(
 
 @router.get(
     "/devices/{device_id}",
-    response_model=FloorDeviceResponse,
+    response_model=FloorDeviceWithDataResponse,
     summary="Get a specific device by ID",
 )
 async def get_floor_device(
-    device_id: int, service: FloorServiceDep, vega_service: VegaClientDep
+    device_id: int,
+    service: FloorServiceDep,
+    vega_service: VegaClientDep,
+    payload_service: PayloadDecoderServiceDep,
 ):
     """Get a specific device by its ID"""
     device = await service.get_floor_device(device_id)
@@ -298,7 +308,19 @@ async def get_floor_device(
             detail=f"Vega device with EUI {device.dev_eui} not found",
         )
 
-    return FloorDeviceResponse(
+    vega_data = await vega_service.get_device_data(
+        device.dev_eui, GetDeviceDataSelect(limit=10)
+    )
+
+    decoded_data = []
+    for entry in vega_data.data_list:
+        if not entry.data or not entry.port:
+            continue
+        decoded_data.append(
+            payload_service.decode_payload(device.device_type, entry.data, entry.port)
+        )
+
+    return FloorDeviceWithDataResponse(
         id=device.id,
         dev_eui=device.dev_eui,
         floor_id=device.floor_id,
@@ -310,6 +332,7 @@ async def get_floor_device(
         rssi=vega_device.last_rssi,
         snr=vega_device.last_snr,
         last_data_ts=vega_device.last_data_ts,
+        data=decoded_data,
     )
 
 

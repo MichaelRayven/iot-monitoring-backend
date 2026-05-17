@@ -1,6 +1,7 @@
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.connection_manager import manager
-from app.services.payload_decoders import decode_payload
+from app.core.deps import get_payload_decoder_service
+from app.services.payload_decoder_service import PayloadDecoderService
 from app.core.settings import settings
 from app.services.vega_client import VegaClient
 import logging
@@ -22,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def realtime_event_listener(client: VegaClient) -> None:
+async def realtime_event_listener(client: VegaClient, decoder_service: PayloadDecoderService) -> None:
     async for message in client.listen():
         if message.get("cmd") != "rx":
             continue
@@ -36,7 +37,7 @@ async def realtime_event_listener(client: VegaClient) -> None:
 
         device_type = message.get("devType") or message.get("device_type")
 
-        decoded = decode_payload(
+        decoded = decoder_service.decode_payload(
             device_type=device_type,
             payload_hex=raw_data,
             port=port,
@@ -66,7 +67,7 @@ async def lifespan(app: FastAPI):
 
         app.state.vega_client = client
         app.state.vega_realtime_task = asyncio.create_task(
-            realtime_event_listener(client)
+            realtime_event_listener(client, get_payload_decoder_service())
         )
 
         yield

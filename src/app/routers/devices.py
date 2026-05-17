@@ -1,11 +1,16 @@
 import logging
 from app.schemas.device import DeviceResponse
-from app.core.deps import VegaClientDep
+from app.core.deps import VegaClientDep, PayloadDecoderServiceDep
 from fastapi import APIRouter, HTTPException, status
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/devices", tags=["devices"])
 
+
+
+@router.get("/types", response_model=list[str])
+async def get_device_types(decoder_service: PayloadDecoderServiceDep):
+    return decoder_service.get_supported_devices()
 
 @router.get("", response_model=list[DeviceResponse])
 async def get_devices(service: VegaClientDep):
