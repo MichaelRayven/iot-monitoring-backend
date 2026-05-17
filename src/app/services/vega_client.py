@@ -40,8 +40,10 @@ class VegaClient:
 
         self._reader_task: asyncio.Task[None] | None = None
 
-        self._pending: set[str] = set()
-        self._command_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._expected_response_cmd: str | None = None
+        self._expected_dev_eui: str | None = None
+        self._response_future: asyncio.Future | None = None
+
         self._event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
     async def connect(self) -> None:
@@ -118,7 +120,12 @@ class VegaClient:
 
         async with self._request_lock:
             cmd = self._response_cmd_for(payload.cmd)
-            self._pending.add(cmd)
+            self._expected_response_cmd = cmd
+
+            payload_dict = payload.model_dump(by_alias=True, exclude_none=True)
+            self._expected_dev_eui = payload_dict.get("devEui")
+
+            self._response_future = asyncio.get_running_loop().create_future()
 
             try:
                 logger.debug(
@@ -129,9 +136,11 @@ class VegaClient:
                     payload.model_dump_json(by_alias=True, exclude_none=True)
                 )
 
-                return await asyncio.wait_for(self._command_queue.get(), timeout=15)
+                return await asyncio.wait_for(self._response_future, timeout=15)
             finally:
-                self._pending.discard(cmd)
+                self._expected_response_cmd = None
+                self._expected_dev_eui = None
+                self._response_future = None
 
     async def _reader_loop(self) -> None:
         assert self._ws is not None
@@ -143,9 +152,18 @@ class VegaClient:
             message = json.loads(raw)
             cmd = message.get("cmd")
 
-            if cmd in self._pending:
-                logger.info("Command: %s", message.get("cmd"))
-                await self._command_queue.put(message)
+            is_expected = False
+            if cmd and cmd == self._expected_response_cmd:
+                is_expected = True
+
+                if self._expected_dev_eui is not None:
+                    msg_dev_eui = message.get("devEui")
+                    if msg_dev_eui is not None and msg_dev_eui != self._expected_dev_eui:
+                        is_expected = False
+
+            if is_expected and self._response_future and not self._response_future.done():
+                logger.info("Command matched expected: %s", cmd)
+                self._response_future.set_result(message)
             else:
                 await self._event_queue.put(message)
 
