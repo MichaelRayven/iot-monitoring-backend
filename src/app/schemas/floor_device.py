@@ -44,7 +44,7 @@ class FloorDeviceResponse(DeviceResponse):
 class FloorDeviceWithDataResponse(FloorDeviceResponse):
     """Schema for floor devices in responses with additional data field"""
 
-    data: dict[str, Any] = Field(
-        default_factory=dict(),
+    data: list[dict[str, Any]] = Field(
+        default_factory=list(),
         description="Arbitrary data field, different for each device type",
     )
