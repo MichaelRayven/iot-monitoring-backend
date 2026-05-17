@@ -10,7 +10,7 @@ class FloorDevice(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     dev_eui: Mapped[str] = mapped_column(String(16), index=True, unique=True)
-    device_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    device_type: Mapped[str] = mapped_column(String(64))
     is_stationary: Mapped[bool] = mapped_column(nullable=False, default=False)
     x: Mapped[float | None] = mapped_column(Float, nullable=True)
     y: Mapped[float | None] = mapped_column(Float, nullable=True)

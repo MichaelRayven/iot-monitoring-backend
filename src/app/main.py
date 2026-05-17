@@ -1,3 +1,5 @@
+from botocore.exceptions import ValidationError
+from app.schemas.vega.realtime import RxPacket
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.connection_manager import manager
 from app.core.deps import get_payload_decoder_service
@@ -27,45 +29,43 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def realtime_event_listener(client: VegaClient, decoder_service: PayloadDecoderService) -> None:
+async def realtime_event_listener(
+    client: VegaClient, decoder_service: PayloadDecoderService
+) -> None:
     async for message in client.listen():
         if message.get("cmd") != "rx":
             continue
 
-        dev_eui = message.get("devEui")
-        port = message.get("port")
-        raw_data = message.get("data")
+        try:
+            packet = RxPacket.model_validate(message)
 
-        if not dev_eui or port is None or raw_data is None:
+            async with SessionLocal() as db:
+                stmt = select(FloorDevice).where(FloorDevice.dev_eui == packet.dev_eui)
+                result = await db.execute(stmt)
+                device = result.scalar_one_or_none()
+
+            if not device:
+                continue
+
+            decoded = decoder_service.decode_payload(
+                device_type=device.device_type,
+                payload_hex=packet.data,
+                port=packet.port,
+            )
+
+            update_msg = RealtimeUpdateMessage(
+                dev_eui=packet.dev_eui,
+                floor_id=device.floor_id,
+                device_type=device.device_type,
+                decoded=decoded,
+            )
+
+            await manager.send_update(
+                str(device.floor_id),
+                update_msg.model_dump_json(),
+            )
+        except ValidationError as _:
             continue
-
-        async with SessionLocal() as db:
-            stmt = select(FloorDevice).where(FloorDevice.dev_eui == dev_eui)
-            result = await db.execute(stmt)
-            device = result.scalar_one_or_none()
-
-        if not device:
-            continue
-
-        device_type = device.device_type or message.get("devType") or message.get("device_type")
-
-        decoded = decoder_service.decode_payload(
-            device_type=device_type,
-            payload_hex=raw_data,
-            port=port,
-        )
-
-        update_msg = RealtimeUpdateMessage(
-            dev_eui=dev_eui,
-            floor_id=str(device.floor_id),
-            device_type=device_type,
-            decoded=decoded,
-        )
-
-        await manager.send_update(
-            str(device.floor_id),
-            update_msg.model_dump_json(),
-        )
 
 
 @asynccontextmanager

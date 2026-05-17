@@ -7,10 +7,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
-
 @router.get("/types", response_model=list[str])
 async def get_device_types(decoder_service: PayloadDecoderServiceDep):
-    return decoder_service.get_supported_devices()
+    return decoder_service.get_supported_devices() + ["Beacon"]
+
 
 @router.get("", response_model=list[DeviceResponse])
 async def get_devices(service: VegaClientDep):
