@@ -40,8 +40,9 @@ class VegaClient:
 
         self._reader_task: asyncio.Task[None] | None = None
 
-        self._pending: set[str] = set()
-        self._command_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._expected_response_cmd: str | None = None
+        self._response_future: asyncio.Future | None = None
+
         self._event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
     async def connect(self) -> None:
@@ -118,7 +119,9 @@ class VegaClient:
 
         async with self._request_lock:
             cmd = self._response_cmd_for(payload.cmd)
-            self._pending.add(cmd)
+            self._expected_response_cmd = cmd
+
+            self._response_future = asyncio.get_running_loop().create_future()
 
             try:
                 logger.debug(
@@ -129,9 +132,10 @@ class VegaClient:
                     payload.model_dump_json(by_alias=True, exclude_none=True)
                 )
 
-                return await asyncio.wait_for(self._command_queue.get(), timeout=15)
+                return await asyncio.wait_for(self._response_future, timeout=15)
             finally:
-                self._pending.discard(cmd)
+                self._expected_response_cmd = None
+                self._response_future = None
 
     async def _reader_loop(self) -> None:
         assert self._ws is not None
@@ -143,9 +147,9 @@ class VegaClient:
             message = json.loads(raw)
             cmd = message.get("cmd")
 
-            if cmd in self._pending:
-                logger.info("Command: %s", message.get("cmd"))
-                await self._command_queue.put(message)
+            if cmd and cmd == self._expected_response_cmd and self._response_future and not self._response_future.done():
+                logger.info("Command matched expected: %s", cmd)
+                self._response_future.set_result(message)
             else:
                 await self._event_queue.put(message)
 

@@ -8,12 +8,16 @@ import logging
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from sqlalchemy import select
 
 from app.routers.devices import router as devices_router
 from app.routers.floors import router as floors_router
 from app.routers.buildings import router as buildings_router
 from app.routers.realtime import router as realtime_router
 from app.routers.floorplan import router as floorplan_router
+from app.core.db import SessionLocal
+from app.models.floor_devices import FloorDevice
+from app.schemas.subscribtions import RealtimeUpdateMessage
 
 
 logging.basicConfig(
@@ -35,7 +39,15 @@ async def realtime_event_listener(client: VegaClient, decoder_service: PayloadDe
         if not dev_eui or port is None or raw_data is None:
             continue
 
-        device_type = message.get("devType") or message.get("device_type")
+        async with SessionLocal() as db:
+            stmt = select(FloorDevice).where(FloorDevice.dev_eui == dev_eui)
+            result = await db.execute(stmt)
+            device = result.scalar_one_or_none()
+
+        if not device:
+            continue
+
+        device_type = device.device_type or message.get("devType") or message.get("device_type")
 
         decoded = decoder_service.decode_payload(
             device_type=device_type,
@@ -43,15 +55,17 @@ async def realtime_event_listener(client: VegaClient, decoder_service: PayloadDe
             port=port,
         )
 
-        # await manager.send_update(
-        #     dev_eui,
-        #     {
-        #         "dev_eui": dev_eui,
-        #         "port": port,
-        #         "raw": message,
-        #         "decoded": decoded,
-        #     },
-        # )
+        update_msg = RealtimeUpdateMessage(
+            dev_eui=dev_eui,
+            floor_id=str(device.floor_id),
+            device_type=device_type,
+            decoded=decoded,
+        )
+
+        await manager.send_update(
+            str(device.floor_id),
+            update_msg.model_dump_json(),
+        )
 
 
 @asynccontextmanager
