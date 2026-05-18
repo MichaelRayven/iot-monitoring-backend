@@ -4,12 +4,12 @@ from pydantic import BaseModel
 
 class SubscribeMessage(BaseModel):
     action: Literal["subscribe"] = "subscribe"
-    floor_id: str
+    floor_id: int
 
 
 class UnsubscribeMessage(BaseModel):
     action: Literal["unsubscribe"] = "unsubscribe"
-    floor_id: str
+    floor_id: int
 
 
 class RealtimeUpdateMessage(BaseModel):

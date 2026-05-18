@@ -1,3 +1,4 @@
+from typing import Any, Annotated
 from botocore.exceptions import ValidationError
 from app.schemas.vega.realtime import RxPacket
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +10,7 @@ from app.services.vega_client import VegaClient
 import logging
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Body
 from sqlalchemy import select
 
 from app.routers.devices import router as devices_router
@@ -61,7 +62,7 @@ async def realtime_event_listener(
             )
 
             await manager.send_update(
-                str(device.floor_id),
+                device.floor_id,
                 update_msg.model_dump_json(),
             )
         except ValidationError as _:
@@ -96,10 +97,7 @@ app = FastAPI(lifespan=lifespan, title="Vega IoT Monitoring")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -110,3 +108,8 @@ app.include_router(floors_router)
 app.include_router(buildings_router)
 app.include_router(realtime_router)
 app.include_router(floorplan_router)
+
+
+@app.post("/test/{floor_id}")
+async def test_ws(floor_id: int, body: RealtimeUpdateMessage):
+    await manager.send_update(floor_id, body.model_dump_json())
