@@ -309,11 +309,12 @@ async def get_floor_device(
         )
 
     vega_data = await vega_service.get_device_data(
-        device.dev_eui, GetDeviceDataSelect(limit=10)
+        device.dev_eui, GetDeviceDataSelect(limit=50)
     )
 
     decoded_data = []
     for entry in vega_data.data_list:
+        logger.info(entry)
         if not entry.data or not entry.port:
             continue
         decoded_entry = payload_service.decode_payload(
