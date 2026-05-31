@@ -1,3 +1,4 @@
+from app.schemas.floor import FloorResponse
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -12,6 +13,7 @@ class BuildingResponse(BaseModel):
     address: str = Field(
         ..., min_length=1, max_length=255, description="Building address"
     )
+    floors: list[FloorResponse]
 
 
 class BuildingCreate(BaseModel):
