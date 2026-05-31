@@ -1,6 +1,7 @@
 from typing import Any
 from app.services.decoders.base import PayloadDecoderStrategy
 
+
 class PayloadDecoderService:
     def __init__(self):
         self._strategies: dict[str, PayloadDecoderStrategy] = {}
@@ -9,7 +10,7 @@ class PayloadDecoderService:
         self._strategies[device_type] = strategy
 
     def decode_payload(
-        self, device_type: str | None, payload_hex: str, port: int
+        self, device_type: str, payload_hex: str, port: int
     ) -> dict[str, Any]:
         if not device_type:
             return {

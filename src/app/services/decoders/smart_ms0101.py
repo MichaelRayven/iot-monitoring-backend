@@ -1,6 +1,6 @@
 from typing import Any
 from app.services.decoders.base import PayloadDecoderStrategy
-from app.services.decoders.utils import read_u8, read_i8, read_u32
+from app.services.decoders.utils import read_u8, read_i8, read_u32, read_i16
 
 
 class SmartMS0101Decoder(PayloadDecoderStrategy):
@@ -14,7 +14,7 @@ class SmartMS0101Decoder(PayloadDecoderStrategy):
         packet_type, offset = read_u8(data, offset)
         battery, offset = read_u8(data, offset)
         settings, offset = read_u8(data, offset)
-        temperature, offset = read_i8(data, offset)
+        temperature, offset = read_i16(data, offset)
         reason, offset = read_u8(data, offset)
         timestamp, offset = read_u32(data, offset)
 
