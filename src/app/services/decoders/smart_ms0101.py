@@ -8,7 +8,7 @@ class SmartMS0101Decoder(PayloadDecoderStrategy):
         data = bytes.fromhex(payload_hex)
 
         if port != 2 or len(data) < 8:
-            return {"packet": "unknown", "payload_hex": payload_hex}
+            return {"device": "Smart-MS0101", "packet": "unknown", "payload_hex": payload_hex}
 
         offset = 0
         packet_type, offset = read_u8(data, offset)

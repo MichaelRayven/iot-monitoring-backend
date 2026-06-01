@@ -1,5 +1,6 @@
 from botocore.exceptions import ValidationError
 from app.schemas.vega.realtime import RxPacket
+from app.schemas.vega.get_device_data import DeviceDataEntry
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.connection_manager import manager
 from app.core.deps import get_payload_decoder_service
@@ -42,7 +43,7 @@ async def realtime_event_listener(
             logger.info("Received message: %s", packet.model_dump_json())
 
             async with SessionLocal() as db:
-                stmt = select(FloorDevice).where(FloorDevice.dev_eui == packet.dev_eui)
+                stmt = select(FloorDevice).where(FloorDevice.uid == packet.dev_eui)
                 result = await db.execute(stmt)
                 device = result.scalar_one_or_none()
 
@@ -52,8 +53,13 @@ async def realtime_event_listener(
 
             decoded = decoder_service.decode_payload(
                 device_type=device.device_type,
-                payload_hex=packet.data,
-                port=packet.port,
+                entry=DeviceDataEntry(
+                    data=packet.data,
+                    port=packet.port,
+                    ts=packet.ts,
+                    rssi=packet.rssi,
+                    snr=packet.snr,
+                ),
             )
             logger.info("Decoded message: %s", decoded)
 
