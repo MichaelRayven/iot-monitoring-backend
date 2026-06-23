@@ -9,6 +9,8 @@ from app.schemas.vega.get_device_data import (
 from app.schemas.vega.get_devices import (
     GetDevicesRequest,
     GetDevicesResponse,
+    GetDevicesSelect,
+    VegaDevice,
 )
 from contextlib import suppress
 import logging
@@ -38,8 +40,9 @@ class VegaClient:
 
         self._reader_task: asyncio.Task[None] | None = None
 
-        self._pending: set[str] = set()
-        self._command_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._expected_response_cmd: str | None = None
+        self._response_future: asyncio.Future | None = None
+
         self._event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
     async def connect(self) -> None:
@@ -77,9 +80,25 @@ class VegaClient:
         while True:
             yield await self._event_queue.get()
 
-    async def get_devices(self) -> GetDevicesResponse:
-        response = await self._request(GetDevicesRequest())
+    async def get_devices(
+        self, select: GetDevicesSelect | None = None
+    ) -> GetDevicesResponse:
+        response = await self._request(GetDevicesRequest(select=select))
         return GetDevicesResponse.model_validate(response)
+
+    async def get_device_by_id(self, dev_eui: str) -> VegaDevice | None:
+        """Get single device registration info by EUI"""
+
+        response = await self.get_devices(
+            GetDevicesSelect(
+                dev_eui_list=[dev_eui]  # ty:ignore[unknown-argument]
+            )
+        )
+
+        if response.status and len(response.devices_list) > 0:
+            return response.devices_list[0]
+        else:
+            return None
 
     async def get_device_data(
         self,
@@ -100,16 +119,23 @@ class VegaClient:
 
         async with self._request_lock:
             cmd = self._response_cmd_for(payload.cmd)
-            self._pending.add(cmd)
+            self._expected_response_cmd = cmd
+
+            self._response_future = asyncio.get_running_loop().create_future()
 
             try:
+                logger.debug(
+                    "Request structure: %s",
+                    payload.model_dump_json(by_alias=True, exclude_none=True),
+                )
                 await self._ws.send(
                     payload.model_dump_json(by_alias=True, exclude_none=True)
                 )
 
-                return await asyncio.wait_for(self._command_queue.get(), timeout=15)
+                return await asyncio.wait_for(self._response_future, timeout=15)
             finally:
-                self._pending.discard(cmd)
+                self._expected_response_cmd = None
+                self._response_future = None
 
     async def _reader_loop(self) -> None:
         assert self._ws is not None
@@ -121,9 +147,9 @@ class VegaClient:
             message = json.loads(raw)
             cmd = message.get("cmd")
 
-            if cmd in self._pending:
-                logger.info("Command: %s", message.get("cmd"))
-                await self._command_queue.put(message)
+            if cmd and cmd == self._expected_response_cmd and self._response_future and not self._response_future.done():
+                logger.info("Command matched expected: %s", cmd)
+                self._response_future.set_result(message)
             else:
                 await self._event_queue.put(message)
 

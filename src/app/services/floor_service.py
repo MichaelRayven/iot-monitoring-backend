@@ -4,7 +4,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.floor import Floor
-from app.models.floor_devices import FloorDevice
+from app.models.floor_devices import FloorDevice, BEACON_DEVICE_TYPE
 from app.models.building import Building
 from app.schemas.floor import FloorCreate, FloorUpdate
 from app.schemas.floor_device import FloorDeviceCreate, FloorDeviceUpdate
@@ -128,7 +128,6 @@ class FloorService:
         floor_id: int,
         skip: int = 0,
         limit: int = 100,
-        device_type: str | None = None,
     ) -> list[FloorDevice]:
         """Get all devices for a specific floor"""
 
@@ -138,9 +137,6 @@ class FloorService:
             raise ValueError(f"Floor with id {floor_id} not found")
 
         stmt = select(FloorDevice).where(FloorDevice.floor_id == floor_id)
-
-        if device_type:
-            stmt = stmt.where(FloorDevice.device_type == device_type)
 
         # Apply pagination
         stmt = stmt.offset(skip).limit(limit).order_by(FloorDevice.id)
@@ -152,27 +148,33 @@ class FloorService:
     async def add_device_to_floor(
         self, floor_id: int, device_data: FloorDeviceCreate
     ) -> FloorDevice:
-        """Add a device to a floor"""
+        """Add a vega or beacon device to a floor."""
 
         try:
-            # Verify floor exists
             floor = await self.get_floor(floor_id)
             if not floor:
                 raise ValueError(f"Floor with id {floor_id} not found")
 
-            # Check unique constraint
-            existing_device = await self.db.execute(
-                select(FloorDevice).where(FloorDevice.dev_eui == device_data.dev_eui)
+            existing = await self.db.execute(
+                select(FloorDevice).where(FloorDevice.uid == device_data.uid)
             )
-            if existing_device.scalar_one_or_none():
-                raise ValueError(
-                    f"Device with dev_eui {device_data.dev_eui} already exists"
-                )
+            if existing.scalar_one_or_none():
+                raise ValueError(f"Device with uid {device_data.uid} already exists")
 
-            data = device_data.model_dump()
+            is_beacon = device_data.device_type == BEACON_DEVICE_TYPE
+            data = {
+                "uid": device_data.uid,
+                "device_type": device_data.device_type,
+                "floor_id": floor_id,
+                "x": device_data.x,
+                "y": device_data.y,
+                # Beacons carry their own name; vega uses uid as placeholder
+                # (real name is fetched live from Vega at query time)
+                "name": device_data.name if is_beacon else (device_data.name or device_data.uid),
+                "is_stationary": device_data.is_stationary,
+            }
+
             stmt = insert(FloorDevice).values(**data).returning(FloorDevice)
-
-            # Create device
             result = await self.db.execute(stmt)
             await self.db.commit()
 
@@ -182,10 +184,18 @@ class FloorService:
             raise e
 
     async def get_floor_device(self, device_id: int) -> FloorDevice | None:
-        """Get a specific device on a floor"""
+        """Get a specific device by ID."""
 
         result = await self.db.execute(
             select(FloorDevice).where(FloorDevice.id == device_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_device_by_uid(self, uid: str) -> FloorDevice | None:
+        """Get a floor device by its UID (dev_eui or MAC address)."""
+
+        result = await self.db.execute(
+            select(FloorDevice).where(FloorDevice.uid == uid)
         )
         return result.scalar_one_or_none()
 
@@ -200,14 +210,11 @@ class FloorService:
             if not device:
                 return None
 
-            # Verify floor exists
-            if device_data.floor_id is not None:
-                floor = await self.get_floor(floor_id=device_data.floor_id)
-                if not floor:
-                    raise ValueError(f"Floor with id {device_data.floor_id} not found")
+            # Only update fields that were explicitly provided
+            data = device_data.model_dump(exclude_none=True)
+            if not data:
+                return device
 
-            # Update device data
-            data = device_data.model_dump(exclude_unset=True)
             stmt = (
                 update(FloorDevice)
                 .where(FloorDevice.id == device_id)

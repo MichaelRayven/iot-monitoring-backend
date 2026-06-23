@@ -1,21 +1,9 @@
 from typing import Optional, List
-
-
 from sqlalchemy import select, update, insert, delete
-
-
 from sqlalchemy.ext.asyncio import AsyncSession
-
-
 from sqlalchemy.orm import selectinload
-
-
 from app.models.building import Building
-
-
 from app.schemas.building import BuildingCreate, BuildingUpdate
-
-
 from sqlalchemy.exc import SQLAlchemyError
 
 
@@ -24,15 +12,14 @@ class BuildingService:
 
         self.db = db
 
-    async def get_building(
-        self, building_id: int, include_floors: bool = False
-    ) -> Optional[Building]:
+    async def get_building(self, building_id: int) -> Optional[Building]:
         """Get a single building by ID"""
 
-        stmt = select(Building).where(Building.id == building_id)
-
-        if include_floors:
-            stmt = stmt.options(selectinload(Building.floors))
+        stmt = (
+            select(Building)
+            .where(Building.id == building_id)
+            .options(selectinload(Building.floors))
+        )
 
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
@@ -51,6 +38,7 @@ class BuildingService:
             )
 
         stmt = stmt.offset(skip).limit(limit).order_by(Building.id)
+        stmt = stmt.options(selectinload(Building.floors))
 
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
